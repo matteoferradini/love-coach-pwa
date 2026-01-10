@@ -2,16 +2,19 @@
 
 import { useState } from "react";
 
+type ChatMsg = { role: "user" | "assistant"; content: string };
+
 export default function Home() {
   const [input, setInput] = useState("");
-  const [messages, setMessages] = useState<
-    { role: "user" | "assistant"; content: string }[]
-  >([]);
+  const [messages, setMessages] = useState<ChatMsg[]>([]);
 
   async function sendMessage() {
-    if (!input.trim()) return;
+    const text = input.trim();
+    if (!text) return;
 
-    const newMessages = [...messages, { role: "user", content: input }];
+    const userMsg: ChatMsg = { role: "user", content: text };
+    const newMessages: ChatMsg[] = [...messages, userMsg];
+
     setMessages(newMessages);
     setInput("");
 
@@ -24,14 +27,16 @@ export default function Home() {
 
       const data = await res.json();
 
+      const assistantMsg: ChatMsg = {
+        role: "assistant",
+        content: data.reply ?? data.error ?? "Errore risposta",
+      };
+
+      setMessages((m) => [...m, assistantMsg]);
+    } catch (e: any) {
       setMessages((m) => [
         ...m,
-        { role: "assistant", content: data.reply ?? "Errore risposta" },
-      ]);
-    } catch {
-      setMessages((m) => [
-        ...m,
-        { role: "assistant", content: "Errore di connessione" },
+        { role: "assistant", content: `Errore: ${e?.message ?? "connessione"}` },
       ]);
     }
   }
@@ -43,8 +48,7 @@ export default function Home() {
       <div style={{ marginBottom: 20 }}>
         {messages.map((m, i) => (
           <p key={i}>
-            <strong>{m.role === "user" ? "Tu" : "Coach"}:</strong>{" "}
-            {m.content}
+            <strong>{m.role === "user" ? "Tu" : "Coach"}:</strong> {m.content}
           </p>
         ))}
       </div>
@@ -54,6 +58,7 @@ export default function Home() {
         onChange={(e) => setInput(e.target.value)}
         placeholder="Scrivi qui…"
         style={{ width: "100%", padding: 10 }}
+        onKeyDown={(e) => e.key === "Enter" && sendMessage()}
       />
       <button onClick={sendMessage} style={{ marginTop: 10 }}>
         Invia
