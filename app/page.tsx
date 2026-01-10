@@ -68,7 +68,7 @@ export default function Home() {
     if (!profile || !canSend) return;
 
     const userMsg: ChatMsg = { role: "user", content: input.trim() };
-    const newMessages = [...messages, userMsg];
+    const newMessages: ChatMsg[] = [...messages, userMsg];
     setMessages(newMessages);
     setInput("");
     setLoading(true);
@@ -119,7 +119,7 @@ export default function Home() {
 
       setReplyResult(data.reply);
     } catch (e: any) {
-      setReplyResult(`Errore: ${e?.message ?? "connessione"}`);
+      setReplyResult(`Errore: ${e?.message ?? "conn or connessione"}`);
     } finally {
       setLoading(false);
     }
@@ -167,7 +167,7 @@ export default function Home() {
           <h2 style={{ marginTop: 0 }}>📝 Rispondi al messaggio</h2>
           <p style={{ color: "#555", marginTop: 4 }}>
             Incolla qui il messaggio che hai ricevuto e ti preparo 3 risposte pronte (calma, decisa,
-            empatica con confini).
+            empatica con confini) + un Reality Check.
           </p>
 
           <textarea
@@ -264,7 +264,7 @@ function Onboarding({ onDone }: { onDone: (p: Profile) => void }) {
   const [name, setName] = useState("");
   const [situation, setSituation] = useState<Profile["situation"]>("coppia");
   const [goal, setGoal] = useState<Profile["goal"]>("capire");
-  const [tone, setTone] = useState<Profile["tone"]>("calmo");
+  const [tone, setTone] = useState<Profile["tone"]>("dolce"); // default morbido
   const [context, setContext] = useState("");
   const [noManipulation, setNoManipulation] = useState(true);
   const [noStalking, setNoStalking] = useState(true);
@@ -320,9 +320,9 @@ function Onboarding({ onDone }: { onDone: (p: Profile) => void }) {
             onChange={(e) => setTone(e.target.value as any)}
             style={{ width: "100%", padding: 10, marginTop: 6 }}
           >
+            <option value="dolce">Dolce (morbido ma onesto)</option>
             <option value="calmo">Calmo</option>
-            <option value="deciso">Deciso</option>
-            <option value="dolce">Dolce</option>
+            <option value="deciso">Fermo (ma rispettoso)</option>
           </select>
         </label>
       </div>

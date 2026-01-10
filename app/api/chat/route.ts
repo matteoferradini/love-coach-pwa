@@ -14,16 +14,21 @@ type Profile = {
 function buildSystemPrompt(profile: Profile, mode: "chat" | "reply_to_message") {
   const who = profile.name ? `L'utente si chiama ${profile.name}.` : "";
   const b = profile.boundaries;
+
   const rules = [
     "Sei Love Coach AI: guida relazionale pratica, empatica, concreta.",
+    "Tono: morbido, rispettoso, mai aggressivo o giudicante.",
+    "Obiettivo: aiutare l’utente a comportarsi bene e proteggere dignità e confini.",
+    "Regola d’oro: dici sempre la verità anche se è scomoda (crudele realtà), ma con tatto.",
     "Niente diagnosi cliniche. Non sostituisci terapia.",
-    b.noManipulation ? "Non proporre manipolazione o giochi mentali." : "",
-    b.noStalking ? "Non proporre stalking, controllo, accessi non consentiti." : "",
-    "Dai piani d'azione brevi: 3-6 passi chiari.",
-    "Quando utile, proponi frasi pronte da inviare (brevi, dignitose).",
-    profile.tone === "calmo" ? "Tono: calmo e maturo." : "",
-    profile.tone === "deciso" ? "Tono: deciso e con confini." : "",
-    profile.tone === "dolce" ? "Tono: dolce ma con dignità." : "",
+    b.noManipulation ? "Non proporre manipolazione, giochi mentali o strategie tossiche." : "",
+    b.noStalking ? "Non proporre stalking, controllo, accessi non consentiti o ossessioni." : "",
+    "Struttura risposta: 1) verità in 1–2 frasi, 2) cosa significa, 3) cosa fare oggi (3–6 passi), 4) frase pronta da inviare (se utile).",
+    "Se l’utente vuole far tornare qualcuno: proponi solo azioni mature (spazio, chiarezza, coerenza), mai ricatti o pressioni.",
+    "Se mancano dettagli, fai massimo 1 domanda breve, poi dai comunque un piano.",
+    profile.tone === "calmo" ? "Stile: calmo e maturo." : "",
+    profile.tone === "deciso" ? "Stile: dolce ma fermo nei confini." : "",
+    profile.tone === "dolce" ? "Stile: dolce e comprensivo, ma chiaro." : "",
   ]
     .filter(Boolean)
     .join("\n");
@@ -33,10 +38,10 @@ Situazione: ${profile.situation}
 Obiettivo: ${profile.goal}`;
 
   if (mode === "reply_to_message") {
-    return `${rules}\n${who}\n${context}\n\nModalità: genera 3 risposte PRONTE da inviare (1) calma e matura, (2) breve e decisa, (3) empatica con confini.`;
+    return `${rules}\n${who}\n${context}\n\nModalità: prima fai un "Reality check" in 2 frasi (cosa sta succedendo davvero e cosa rischia l’utente). Poi genera 3 risposte PRONTE da inviare: (1) calma e matura, (2) breve e decisa, (3) empatica con confini.`;
   }
 
-  return `${rules}\n${who}\n${context}\n\nModalità: chat coach. Fai al massimo 1-2 domande brevi se servono, poi dai consigli concreti.`;
+  return `${rules}\n${who}\n${context}\n\nModalità: chat coach. Fai massimo 1 domanda breve se serve, poi dai consigli concreti.`;
 }
 
 export async function POST(req: Request) {
@@ -59,9 +64,13 @@ export async function POST(req: Request) {
 
     if (mode === "reply_to_message") {
       const incoming = String(body?.incoming ?? "").trim();
+      if (!incoming) {
+        return NextResponse.json({ error: "Messaggio ricevuto mancante" }, { status: 400 });
+      }
+
       messages.push({
         role: "user",
-        content: `Messaggio ricevuto:\n"""${incoming}"""\n\nGenera le 3 risposte.`,
+        content: `Messaggio ricevuto:\n"""${incoming}"""\n\n1) Reality check (2 frasi)\n2) Tre risposte pronte (calma/matura, breve/decisa, empatica/con confini).`,
       });
     } else {
       const chatMessages: ChatMsg[] = body?.messages ?? [];
