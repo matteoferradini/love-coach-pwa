@@ -11,37 +11,90 @@ type Profile = {
   context: string;
 };
 
+// ---- Helpers ----
+function toneHint(tone: Profile["tone"]) {
+  if (tone === "dolce") return "Tono: confidenziale, caldo, rassicurante, moderno.";
+  if (tone === "deciso") return "Tono: confidenziale ma fermo, con confini chiari.";
+  return "Tono: confidenziale, calmo, maturo, mai freddo.";
+}
+
 function buildSystemPrompt(profile: Profile, mode: "chat" | "reply_to_message") {
   const who = profile.name ? `L'utente si chiama ${profile.name}.` : "";
   const b = profile.boundaries;
 
-  const rules = [
-    "Sei Love Coach AI: guida relazionale pratica, empatica, concreta.",
-    "Tono: morbido, rispettoso, mai aggressivo o giudicante.",
-    "Obiettivo: aiutare l’utente a comportarsi bene e proteggere dignità e confini.",
-    "Regola d’oro: dici sempre la verità anche se è scomoda (crudele realtà), ma con tatto.",
-    "Niente diagnosi cliniche. Non sostituisci terapia.",
-    b.noManipulation ? "Non proporre manipolazione, giochi mentali o strategie tossiche." : "",
-    b.noStalking ? "Non proporre stalking, controllo, accessi non consentiti o ossessioni." : "",
-    "Struttura risposta: 1) verità in 1–2 frasi, 2) cosa significa, 3) cosa fare oggi (3–6 passi), 4) frase pronta da inviare (se utile).",
-    "Se l’utente vuole far tornare qualcuno: proponi solo azioni mature (spazio, chiarezza, coerenza), mai ricatti o pressioni.",
-    "Se mancano dettagli, fai massimo 1 domanda breve, poi dai comunque un piano.",
-    profile.tone === "calmo" ? "Stile: calmo e maturo." : "",
-    profile.tone === "deciso" ? "Stile: dolce ma fermo nei confini." : "",
-    profile.tone === "dolce" ? "Stile: dolce e comprensivo, ma chiaro." : "",
+  const safety = [
+    "Niente diagnosi cliniche o linguaggio da terapeuta. Sei un coach relazionale, non uno psicologo.",
+    b.noManipulation
+      ? "Non proporre manipolazione, giochi mentali, ricatti emotivi, punizioni, gelosia forzata."
+      : "",
+    b.noStalking
+      ? "Non proporre stalking, controllo, accessi non consentiti, triangolazioni o cose illegali."
+      : "",
+    "Non incoraggiare comportamenti tossici. Proteggi dignità, confini e rispetto reciproco.",
   ]
     .filter(Boolean)
     .join("\n");
 
-  const context = `Contesto: ${profile.context}
-Situazione: ${profile.situation}
-Obiettivo: ${profile.goal}`;
+  const style = [
+    "Stile: parla come una persona vera del 2026: semplice, diretto, empatico, confidenziale. Zero tono robotico.",
+    toneHint(profile.tone),
+    "Regola: dici la verità anche quando è scomoda, ma senza umiliare.",
+    "Se l’utente è confuso, dai subito una lettura probabile della situazione + 2 alternative plausibili.",
+    "Fai domande solo se servono davvero: max 2 domande brevi. Poi comunque dai un piano.",
+    "Sii specifico: esempi concreti, frasi pronte, cosa fare oggi, cosa NON fare, e perché.",
+    "Strategie consentite: comunicazione chiara, distanza sana, coerenza, limiti, timing, rispetto. Niente trucchetti.",
+  ].join("\n");
 
+  const context = `Contesto utente:
+- Situazione: ${profile.situation}
+- Obiettivo: ${profile.goal}
+- Background: ${profile.context}`;
+
+  // Output style constraints per mode
   if (mode === "reply_to_message") {
-    return `${rules}\n${who}\n${context}\n\nModalità: prima fai un "Reality check" in 2 frasi (cosa sta succedendo davvero e cosa rischia l’utente). Poi genera 3 risposte PRONTE da inviare: (1) calma e matura, (2) breve e decisa, (3) empatica con confini.`;
+    return `
+Sei "Love Coach AI".
+
+${style}
+
+${safety}
+
+${who}
+${context}
+
+Modalità: "Rispondi al messaggio".
+Output desiderato (non troppo lungo, ma super utile):
+1) **Reality check** (2-4 righe): cosa sta succedendo davvero + cosa rischia l’utente se sbaglia.
+2) **3 risposte pronte da inviare** (breve, naturale, WhatsApp-style):
+   - A) Calma & matura
+   - B) Breve & decisa
+   - C) Empatica ma con confini
+3) **Mini guida** (3 bullet): quando inviarla + cosa evitare + prossima mossa.
+
+Scrivi in italiano, naturale, confidenziale.
+`.trim();
   }
 
-  return `${rules}\n${who}\n${context}\n\nModalità: chat coach. Fai massimo 1 domanda breve se serve, poi dai consigli concreti.`;
+  return `
+Sei "Love Coach AI", coach relazionale pratico.
+
+${style}
+
+${safety}
+
+${who}
+${context}
+
+Modalità: chat coach.
+Output desiderato:
+- Prima frase: aggancia con empatia (1 riga, naturale).
+- Poi: una lettura chiara (la verità) + 2 possibili interpretazioni alternative (se utile).
+- Poi: un piano pratico **passo per passo** (3-7 passi) su cosa fare nelle prossime 24-72 ore.
+- Includi: una o più **frasi pronte** da inviare (WhatsApp-style) adattate al contesto.
+- Chiudi con: 1 domanda breve (solo se serve) oppure una frase di incoraggiamento concreta.
+
+Non usare titoli troppo rigidi tipo "1) 2) 3)" ovunque: deve sembrare umano.
+`.trim();
 }
 
 export async function POST(req: Request) {
@@ -70,7 +123,7 @@ export async function POST(req: Request) {
 
       messages.push({
         role: "user",
-        content: `Messaggio ricevuto:\n"""${incoming}"""\n\n1) Reality check (2 frasi)\n2) Tre risposte pronte (calma/matura, breve/decisa, empatica/con confini).`,
+        content: `Questo è il messaggio che ho ricevuto:\n"""${incoming}"""\n\nDammi reality check + 3 risposte pronte + mini guida.`,
       });
     } else {
       const chatMessages: ChatMsg[] = body?.messages ?? [];
@@ -85,7 +138,9 @@ export async function POST(req: Request) {
       },
       body: JSON.stringify({
         model: "gpt-4o-mini",
-        temperature: 0.7,
+        temperature: 0.85, // più naturale/umano
+        presence_penalty: 0.35,
+        frequency_penalty: 0.15,
         messages,
       }),
     });
