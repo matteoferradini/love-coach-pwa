@@ -9,7 +9,7 @@ type Profile = {
   name?: string;
   situation: "coppia" | "ex" | "frequentazione";
   goal: "chiarire" | "ricostruire" | "distaccarsi" | "capire";
-  tone: "calmo" | "deciso" | "dolce";
+  tone: "calmo" | "deciso" | "dolce" | "ironico" | "brevissimo" | "nofrills";
   boundaries: {
     noManipulation: boolean;
     noStalking: boolean;
@@ -17,7 +17,7 @@ type Profile = {
   context: string;
 };
 
-const PROFILE_KEY = "love_coach_profile_v1";
+const PROFILE_KEY = "love_coach_profile_v2";
 
 function loadProfile(): Profile | null {
   try {
@@ -38,7 +38,7 @@ function cn(...classes: (string | false | null | undefined)[]) {
 
 export default function Home() {
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [view, setView] = useState<"chat" | "reply" | "profile">("chat");
+  const [view, setView] = useState<"chat" | "reply" | "analyze" | "daily" | "profile">("chat");
 
   const [messages, setMessages] = useState<ChatMsg[]>([
     { role: "assistant", content: "Ciao 👋 Compila il profilo e poi dimmi cosa sta succedendo." },
@@ -48,6 +48,13 @@ export default function Home() {
 
   const [incomingMsg, setIncomingMsg] = useState("");
   const [replyResult, setReplyResult] = useState("");
+
+  const [transcript, setTranscript] = useState("");
+  const [analyzeResult, setAnalyzeResult] = useState("");
+
+  const [dailyNote, setDailyNote] = useState("");
+  const [dailyResult, setDailyResult] = useState("");
+
   const [toast, setToast] = useState<string | null>(null);
 
   const listRef = useRef<HTMLDivElement | null>(null);
@@ -60,8 +67,7 @@ export default function Home() {
       setMessages([
         {
           role: "assistant",
-          content:
-            "Bentornato 🙂 Dimmi cosa è successo oggi (1–3 righe) e cosa vuoi ottenere.",
+          content: "Bentornato 🙂 Dimmi cosa è successo oggi (1–3 righe) e cosa vuoi ottenere.",
         },
       ]);
     } else {
@@ -70,7 +76,6 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    // auto scroll down
     requestAnimationFrame(() => {
       if (!listRef.current) return;
       listRef.current.scrollTop = listRef.current.scrollHeight;
@@ -146,6 +151,60 @@ export default function Home() {
     }
   }
 
+  async function analyzeChat() {
+    if (!profile || transcript.trim().length === 0) return;
+    setLoading(true);
+    setAnalyzeResult("");
+
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode: "analyze_chat",
+          profile,
+          transcript: transcript.trim(),
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || "Errore API");
+
+      setAnalyzeResult(data.reply);
+    } catch (e: any) {
+      setAnalyzeResult(`Errore: ${e?.message ?? "connessione"}`);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function getDailyTask() {
+    if (!profile) return;
+    setLoading(true);
+    setDailyResult("");
+
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode: "daily_task",
+          profile,
+          note: dailyNote.trim(),
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || "Errore API");
+
+      setDailyResult(data.reply);
+    } catch (e: any) {
+      setDailyResult(`Errore: ${e?.message ?? "connessione"}`);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   function resetProfile() {
     localStorage.removeItem(PROFILE_KEY);
     setProfile(null);
@@ -153,6 +212,10 @@ export default function Home() {
     setMessages([{ role: "assistant", content: "Ok 👇 rifacciamo il profilo e ripartiamo bene." }]);
     setIncomingMsg("");
     setReplyResult("");
+    setTranscript("");
+    setAnalyzeResult("");
+    setDailyNote("");
+    setDailyResult("");
   }
 
   async function copy(text: string) {
@@ -174,9 +237,7 @@ export default function Home() {
       <div className="sticky top-0 z-20 border-b border-white/10 bg-zinc-950/85 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
           <div className="flex items-center gap-3">
-            <div className="grid h-9 w-9 place-items-center rounded-xl bg-white/10 text-lg">
-              ❤️
-            </div>
+            <div className="grid h-9 w-9 place-items-center rounded-xl bg-white/10 text-lg">❤️</div>
             <div className="leading-tight">
               <div className="text-sm font-semibold">Love Coach AI</div>
               <div className="text-xs text-zinc-400">{titleRight}</div>
@@ -205,6 +266,24 @@ export default function Home() {
                   📝
                 </button>
                 <button
+                  onClick={() => setView("analyze")}
+                  className={cn(
+                    "rounded-xl px-3 py-2 text-sm font-medium transition",
+                    view === "analyze" ? "bg-white text-zinc-950" : "bg-white/10 hover:bg-white/15"
+                  )}
+                >
+                  📎
+                </button>
+                <button
+                  onClick={() => setView("daily")}
+                  className={cn(
+                    "rounded-xl px-3 py-2 text-sm font-medium transition",
+                    view === "daily" ? "bg-white text-zinc-950" : "bg-white/10 hover:bg-white/15"
+                  )}
+                >
+                  🎯
+                </button>
+                <button
                   onClick={() => setView("profile")}
                   className={cn(
                     "rounded-xl px-3 py-2 text-sm font-medium transition",
@@ -227,25 +306,17 @@ export default function Home() {
 
             <div className="flex flex-col gap-2">
               <SideBtn active={view === "chat"} onClick={() => setView("chat")} icon="💬" label="Chat" />
-              <SideBtn
-                active={view === "reply"}
-                onClick={() => setView("reply")}
-                icon="📝"
-                label="Rispondi al messaggio"
-              />
-              <SideBtn
-                active={view === "profile"}
-                onClick={() => setView("profile")}
-                icon="⚙️"
-                label="Profilo"
-              />
+              <SideBtn active={view === "reply"} onClick={() => setView("reply")} icon="📝" label="Rispondi" />
+              <SideBtn active={view === "analyze"} onClick={() => setView("analyze")} icon="📎" label="Analizza chat" />
+              <SideBtn active={view === "daily"} onClick={() => setView("daily")} icon="🎯" label="Obiettivo oggi" />
+              <SideBtn active={view === "profile"} onClick={() => setView("profile")} icon="⚙️" label="Profilo" />
             </div>
 
             <div className="mt-4 rounded-xl border border-white/10 bg-zinc-950/40 p-3 text-xs text-zinc-300">
               <div className="font-semibold text-zinc-200">Tip veloce</div>
               <div className="mt-1">
-                In chat scrivi cosa è successo + cosa vuoi ottenere. In “Rispondi” incolli un
-                messaggio e ti preparo risposte pronte.
+                📎 incolla chat + “cosa vuoi ottenere” → ti do piano 48h + risposte pronte. 🎯 ti do un task
+                giornaliero semplice.
               </div>
             </div>
 
@@ -272,8 +343,7 @@ export default function Home() {
                 setMessages([
                   {
                     role: "assistant",
-                    content:
-                      "Perfetto 🙂 Dimmi cosa è successo oggi (1–3 righe) e cosa vuoi ottenere.",
+                    content: "Perfetto 🙂 Dimmi cosa è successo oggi (1–3 righe) e cosa vuoi ottenere.",
                   },
                 ]);
               }}
@@ -286,6 +356,24 @@ export default function Home() {
               loading={loading}
               onGenerate={generateReplies}
               onCopy={() => replyResult && copy(replyResult)}
+            />
+          ) : view === "analyze" ? (
+            <AnalyzeCard
+              transcript={transcript}
+              setTranscript={setTranscript}
+              result={analyzeResult}
+              loading={loading}
+              onGenerate={analyzeChat}
+              onCopy={() => analyzeResult && copy(analyzeResult)}
+            />
+          ) : view === "daily" ? (
+            <DailyCard
+              note={dailyNote}
+              setNote={setDailyNote}
+              result={dailyResult}
+              loading={loading}
+              onGenerate={getDailyTask}
+              onCopy={() => dailyResult && copy(dailyResult)}
             />
           ) : (
             <ChatCard
@@ -365,10 +453,7 @@ function ChatCard({
 
       <div ref={listRef} className="h-[60vh] overflow-y-auto px-4 py-4">
         {messages.map((m, i) => (
-          <div
-            key={i}
-            className={cn("mb-3 flex", m.role === "user" ? "justify-end" : "justify-start")}
-          >
+          <div key={i} className={cn("mb-3 flex", m.role === "user" ? "justify-end" : "justify-start")}>
             <div
               className={cn(
                 "group max-w-[92%] rounded-2xl border px-4 py-3 text-sm leading-relaxed shadow-sm",
@@ -509,6 +594,160 @@ function ReplyCard({
   );
 }
 
+function AnalyzeCard({
+  transcript,
+  setTranscript,
+  result,
+  loading,
+  onGenerate,
+  onCopy,
+}: {
+  transcript: string;
+  setTranscript: (v: string) => void;
+  result: string;
+  loading: boolean;
+  onGenerate: () => void;
+  onCopy: () => void;
+}) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/5">
+      <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+        <div className="text-sm font-semibold text-zinc-200">📎 Analizza chat</div>
+        <div className="text-xs text-zinc-400">Dinamica + piano 48h + risposte pronte</div>
+      </div>
+
+      <div className="p-4">
+        <label className="text-xs font-semibold text-zinc-300">Incolla qui la conversazione</label>
+        <textarea
+          value={transcript}
+          onChange={(e) => setTranscript(e.target.value)}
+          className="mt-2 min-h-[180px] w-full resize-none rounded-2xl border border-white/10 bg-zinc-950/50 px-4 py-3 text-sm outline-none placeholder:text-zinc-500 focus:border-white/20"
+          placeholder={`Incolla pezzi di chat. Va bene anche disordinato.
+Esempio:
+Io: ...
+Lei: ...
+Io: ...`}
+        />
+
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            onClick={onGenerate}
+            disabled={loading || transcript.trim().length === 0}
+            className={cn(
+              "rounded-2xl px-4 py-2 text-sm font-semibold transition",
+              transcript.trim().length > 0 && !loading
+                ? "bg-white text-zinc-950 hover:bg-zinc-200"
+                : "bg-white/10 text-zinc-500"
+            )}
+          >
+            {loading ? "Analizzando…" : "Analizza"}
+          </button>
+
+          {result && (
+            <button
+              onClick={onCopy}
+              className="rounded-2xl border border-white/10 bg-white/10 px-4 py-2 text-sm font-semibold hover:bg-white/15"
+            >
+              Copia
+            </button>
+          )}
+        </div>
+
+        {result && (
+          <div className="mt-4 rounded-2xl border border-white/10 bg-zinc-950/40 p-4">
+            <div className="flex items-center justify-between">
+              <div className="text-xs font-semibold text-zinc-300">Risultato</div>
+              <button
+                onClick={onCopy}
+                className="rounded-lg bg-white/10 px-2 py-1 text-xs text-zinc-200 hover:bg-white/15"
+              >
+                Copia
+              </button>
+            </div>
+            <div className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-zinc-100">
+              {result}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function DailyCard({
+  note,
+  setNote,
+  result,
+  loading,
+  onGenerate,
+  onCopy,
+}: {
+  note: string;
+  setNote: (v: string) => void;
+  result: string;
+  loading: boolean;
+  onGenerate: () => void;
+  onCopy: () => void;
+}) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/5">
+      <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+        <div className="text-sm font-semibold text-zinc-200">🎯 Obiettivo oggi</div>
+        <div className="text-xs text-zinc-400">1 task + micro azioni</div>
+      </div>
+
+      <div className="p-4">
+        <label className="text-xs font-semibold text-zinc-300">Nota (facoltativa)</label>
+        <textarea
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          className="mt-2 min-h-[120px] w-full resize-none rounded-2xl border border-white/10 bg-zinc-950/50 px-4 py-3 text-sm outline-none placeholder:text-zinc-500 focus:border-white/20"
+          placeholder="Esempio: oggi sono tentato di scriverle / mi ha visualizzato / sono nervoso..."
+        />
+
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            onClick={onGenerate}
+            disabled={loading}
+            className={cn(
+              "rounded-2xl px-4 py-2 text-sm font-semibold transition",
+              !loading ? "bg-white text-zinc-950 hover:bg-zinc-200" : "bg-white/10 text-zinc-500"
+            )}
+          >
+            {loading ? "Generando…" : "Dammi il task"}
+          </button>
+
+          {result && (
+            <button
+              onClick={onCopy}
+              className="rounded-2xl border border-white/10 bg-white/10 px-4 py-2 text-sm font-semibold hover:bg-white/15"
+            >
+              Copia
+            </button>
+          )}
+        </div>
+
+        {result && (
+          <div className="mt-4 rounded-2xl border border-white/10 bg-zinc-950/40 p-4">
+            <div className="flex items-center justify-between">
+              <div className="text-xs font-semibold text-zinc-300">Risultato</div>
+              <button
+                onClick={onCopy}
+                className="rounded-lg bg-white/10 px-2 py-1 text-xs text-zinc-200 hover:bg-white/15"
+              >
+                Copia
+              </button>
+            </div>
+            <div className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-zinc-100">
+              {result}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function ProfileCard({
   profile,
   onDone,
@@ -530,9 +769,7 @@ function ProfileCard({
     <div className="rounded-2xl border border-white/10 bg-white/5">
       <div className="border-b border-white/10 px-4 py-3">
         <div className="text-sm font-semibold text-zinc-200">⚙️ Profilo</div>
-        <div className="text-xs text-zinc-400">
-          60 secondi e poi il coach ti segue meglio.
-        </div>
+        <div className="text-xs text-zinc-400">60 secondi e poi il coach ti segue meglio.</div>
       </div>
 
       <div className="grid gap-4 p-4 lg:grid-cols-2">
@@ -583,22 +820,21 @@ function ProfileCard({
             <option value="dolce">Dolce (morbido ma onesto)</option>
             <option value="calmo">Calmo e maturo</option>
             <option value="deciso">Fermo (ma rispettoso)</option>
+            <option value="ironico">Ironico leggero (smart)</option>
+            <option value="brevissimo">Ultra breve</option>
+            <option value="nofrills">Zero fronzoli</option>
           </select>
         </div>
 
         <div className="lg:col-span-2">
-          <label className="text-xs font-semibold text-zinc-300">
-            Contesto (2–6 righe)
-          </label>
+          <label className="text-xs font-semibold text-zinc-300">Contesto (2–6 righe)</label>
           <textarea
             value={context}
             onChange={(e) => setContext(e.target.value)}
             className="mt-2 min-h-[140px] w-full resize-none rounded-2xl border border-white/10 bg-zinc-950/50 px-4 py-3 text-sm outline-none placeholder:text-zinc-500 focus:border-white/20"
-            placeholder="Esempio: Ci sentiamo da settimane, lei sparisce, io voglio capire se investire o chiudere. Voglio evitare di sembrare bisognoso..."
+            placeholder="Esempio: Ci sentiamo da settimane, lei sparisce, io voglio capire se investire o chiudere..."
           />
-          <div className="mt-2 text-xs text-zinc-500">
-            Più contesto = consigli più specifici.
-          </div>
+          <div className="mt-2 text-xs text-zinc-500">Più contesto = consigli più specifici.</div>
         </div>
 
         <div className="lg:col-span-2 grid gap-2">
